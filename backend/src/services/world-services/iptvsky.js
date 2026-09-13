@@ -27,6 +27,7 @@ const NONCE_URL = `${BASE_URL}/wp-json/iptvsky-trial/v1/nonce`;
 const AJAX_URL = `${BASE_URL}/wp-admin/admin-ajax.php`;
 const TAG = "IPTVSky";
 const TRIAL_HOURS = 24;
+const MAX_ATTEMPTS = 3;
 
 // Parses an API response and adds a service-specific error message.
 function parseJson(text, error) {
@@ -39,7 +40,7 @@ function parseJson(text, error) {
 
 // Posts the trial form, retrying transient Cloudflare failures and browser gates.
 async function submitTrial(jar, form) {
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     const response = await fetch(AJAX_URL, {
       method: "POST",
       headers: {
@@ -75,6 +76,15 @@ async function submitTrial(jar, form) {
   throw new Error(`[${TAG}] Browser gate retry failed`);
 }
 
+// Requests the nonce, retrying temporary Cloudflare failures.
+async function requestNonce(jar) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const response = await get(NONCE_URL, jar, { referer: TRIAL_URL });
+    if (response.status < 500 || attempt === MAX_ATTEMPTS - 1) return response;
+    await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
+  }
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export default {
@@ -84,7 +94,7 @@ export default {
     const jar = createJar();
 
     log(`[${TAG}] Requesting trial nonce...`);
-    const nonceResponse = await get(NONCE_URL, jar, { referer: TRIAL_URL });
+    const nonceResponse = await requestNonce(jar);
     if (nonceResponse.status >= 400)
       throw new Error(
         `[${TAG}] Failed to request trial nonce (HTTP ${nonceResponse.status}).`,
