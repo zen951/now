@@ -31,6 +31,7 @@ async function apiFetch(baseUrl, path, opts = {}) {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
+    timeout: 10000, // 10 second timeout
   });
 
   if (!res.ok) {
@@ -40,9 +41,9 @@ async function apiFetch(baseUrl, path, opts = {}) {
       const j = await res.json();
       detail = errorDetail?.(j) ?? j.message ?? JSON.stringify(j);
     } catch (_) {}
-    throw new Error(
-      `[apiClient] ${method} ${baseUrl}${path} → ${res.status}${detail ? `: ${detail}` : ""}`,
-    );
+    const errorMsg = `[apiClient] ${method} ${baseUrl}${path} → ${res.status}${detail ? `: ${detail}` : ""}`;
+    console.error("API Error Details:", { status: res.status, detail });
+    throw new Error(errorMsg);
   }
 
   return res.status === 204 ? null : res.json();
