@@ -4,7 +4,7 @@
  * Generic JSON API fetch helper for REST-API-based email providers.
  *
  * Exports:
- *   makeApi(baseUrl, defaultOpts?) � returns a fetch helper bound to baseUrl
+ *   makeApi(baseUrl, defaultOpts?) — returns a fetch helper bound to baseUrl
  */
 
 const DEFAULT_UA =
@@ -23,7 +23,7 @@ async function apiFetch(baseUrl, path, opts = {}) {
   const headers = {
     "Content-Type": "application/json",
     "User-Agent": DEFAULT_UA,
-    Accept: "application/json, */*",
+    "Accept": "application/json, */*",
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
@@ -41,7 +41,7 @@ async function apiFetch(baseUrl, path, opts = {}) {
       detail = errorDetail?.(j) ?? j.message ?? JSON.stringify(j);
     } catch (_) {}
     throw new Error(
-      `[apiClient] ${method} ${baseUrl}${path} ? ${res.status}${detail ? `: ${detail}` : ""}`,
+      `[apiClient] ${method} ${baseUrl}${path} → ${res.status}${detail ? `: ${detail}` : ""}`,
     );
   }
 
