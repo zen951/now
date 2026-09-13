@@ -59,18 +59,11 @@ async function submitTrial(jar, form) {
       jar.hc_js_gate !== "1" &&
       text.includes("hc_js_gate=1") &&
       text.includes("Checking your browser");
-    const transientFailure = response.status === 522 || response.status >= 500;
-
-    if (!browserGate && !transientFailure) return { response, text };
-
-    if (attempt < 2) {
-      await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
-      if (browserGate) jar.hc_js_gate = "1";
-      continue;
-    }
-
-    if (!browserGate)
+    if ((!browserGate && response.status < 500) || attempt === 2)
       return { response, text };
+
+    if (browserGate) jar.hc_js_gate = "1";
+    await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
   }
 
   throw new Error(`[${TAG}] Browser gate retry failed`);
@@ -98,7 +91,7 @@ export default {
     if (!nonce) throw new Error(`[${TAG}] Trial nonce was not returned.`);
 
     const form = new FormData();
-    for (const [key, value] of Object.entries({
+    Object.entries({
       action: "iptvsky_create_trial",
       trial_name: generateUsername(),
       trial_whatsapp: generatePhone(),
@@ -106,9 +99,9 @@ export default {
       trial_device: "other",
       trial_template: "100003981663766",
       iptvsky_nonce: nonce,
-    })) {
+    }).forEach(([key, value]) => {
       form.append(key, value);
-    }
+    });
 
     log(`[${TAG}] Submitting trial claim for ${email}...`);
     const { response, text } = await submitTrial(jar, form);
