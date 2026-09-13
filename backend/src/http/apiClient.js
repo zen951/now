@@ -24,14 +24,22 @@ async function apiFetch(baseUrl, path, opts = {}) {
     "Content-Type": "application/json",
     "User-Agent": DEFAULT_UA,
     "Accept": "application/json, */*",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Cache-Control": "no-cache",
+    "Origin": "https://api.mail.tm",
+    "Referer": "https://api.mail.tm/",
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${baseUrl}${path}`, {
+  const fullUrl = `${baseUrl}${path}`;
+  console.log(`[apiClient] ${method} ${fullUrl}`);
+  
+  const res = await fetch(fullUrl, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
-    timeout: 10000, // 10 second timeout
+    timeout: 10000,
   });
 
   if (!res.ok) {
