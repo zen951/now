@@ -21,7 +21,7 @@ import {
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const BASE_URL = process.env.IPTVSKY_BASE_URL ?? "https://iptvsky.ca";
+const BASE_URL = "https://iptvsky.ca";
 const TRIAL_URL = `${BASE_URL}/trial/`;
 const NONCE_URL = `${BASE_URL}/wp-json/iptvsky-trial/v1/nonce`;
 const AJAX_URL = `${BASE_URL}/wp-admin/admin-ajax.php`;
@@ -59,11 +59,17 @@ async function submitTrial(jar, form) {
       jar.hc_js_gate !== "1" &&
       text.includes("hc_js_gate=1") &&
       text.includes("Checking your browser");
-    if ((!browserGate && response.status < 500) || attempt === 2)
-      return { response, text };
+    const transientFailure = response.status === 522 || response.status >= 500;
 
-    if (browserGate) jar.hc_js_gate = "1";
-    await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
+    if (!browserGate && !transientFailure) return { response, text };
+
+    if (attempt < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 750 * 2 ** attempt));
+      if (browserGate) jar.hc_js_gate = "1";
+      continue;
+    }
+
+    if (!browserGate) return { response, text };
   }
 
   throw new Error(`[${TAG}] Browser gate retry failed`);
@@ -91,7 +97,7 @@ export default {
     if (!nonce) throw new Error(`[${TAG}] Trial nonce was not returned.`);
 
     const form = new FormData();
-    Object.entries({
+    for (const [key, value] of Object.entries({
       action: "iptvsky_create_trial",
       trial_name: generateUsername(),
       trial_whatsapp: generatePhone(),
@@ -99,9 +105,9 @@ export default {
       trial_device: "other",
       trial_template: "100003981663766",
       iptvsky_nonce: nonce,
-    }).forEach(([key, value]) => {
+    })) {
       form.append(key, value);
-    });
+    }
 
     log(`[${TAG}] Submitting trial claim for ${email}...`);
     const { response, text } = await submitTrial(jar, form);
