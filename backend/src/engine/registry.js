@@ -13,7 +13,7 @@ import MailTmProvider from "../email/mailtm.js";
 import TmailyProvider from "../email/tmaily.js";
 import DisposeLolProvider from "../email/disposelol.js";
 import HioMailProvider from "../email/hiomail.js";
-import MailjsProvider from "../email/mailjs.js";
+import PokemailProvider from "../email/pokemail.js";
 
 import Y6TvService from "../services/russian-services/y6tv.js";
 import OgoTvService from "../services/russian-services/ogotv.js";
@@ -49,8 +49,7 @@ export const emailProviders = [
   TmailyProvider,
   DisposeLolProvider,
   HioMailProvider,
-    MailjsProvider,
-
+PokemailProvider
 ];
 
 export const registrationServices = [
