@@ -125,9 +125,7 @@ function endChat(session) {
 
     socket.once("error", (error) => {
       clearTimeout(timeout);
-      reject(
-        new Error(`[${TAG}] Tawk end-chat failed: ${errorDetail(error)}`),
-      );
+      reject(new Error(`[${TAG}] Tawk end-chat failed: ${errorDetail(error)}`));
     });
     socket.once("open", () => {
       socket.send(
@@ -172,7 +170,6 @@ async function startSession() {
       platform: "desktop",
       tzo: new Date().getTimezoneOffset(),
       url: PAGE_URL,
-      referrer: "",
       vss: "",
       // Without a stored UUID, Tawk uses uik to issue a new visitor identity.
       // A new key prevents the session from inheriting an older transcript.
