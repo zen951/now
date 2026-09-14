@@ -176,7 +176,6 @@ async function startSession() {
       uik: createVisitorKey(),
       consent: false,
       wss: "min",
-      uv: 3,
     },
     {
       referer: PAGE_URL,
@@ -191,11 +190,22 @@ async function startSession() {
       `[${TAG}] Tawk session rejected: ${errorDetail(data.error)}`,
     );
 
-  const session = data?.data;
+  // Tawk normally wraps the session in `data`, but some edge responses use a
+  // `session` envelope or return the session object directly.
+  const session = data?.data ?? data?.session ?? data;
   // The first session is only used to reset any previous chat. Tawk may omit
   // `n` when the visitor has no active conversation yet.
-  if (!session?.sk || !session?.vid)
-    throw new Error(`[${TAG}] Tawk session was not created.`);
+  if (!session?.sk || !session?.vid) {
+    const responseKeys =
+      data && typeof data === "object" ? Object.keys(data).join(",") : "none";
+    const sessionKeys =
+      session && typeof session === "object"
+        ? Object.keys(session).join(",")
+        : "none";
+    throw new Error(
+      `[${TAG}] Tawk session was not created (response: ${responseKeys}; session: ${sessionKeys}).`,
+    );
+  }
   return { ...session, jar };
 }
 
