@@ -181,29 +181,35 @@ async function startSession() {
       referer: PAGE_URL,
       origin: "https://lux-iptv.tv",
       throwOnError: false,
+      includeResponse: true,
       timeout: 30_000,
     },
   );
 
-  if (data?.ok === false)
+  const response = data;
+  const responseData = response?.data;
+  if (responseData?.ok === false)
     throw new Error(
-      `[${TAG}] Tawk session rejected: ${errorDetail(data.error)}`,
+      `[${TAG}] Tawk session rejected: ${errorDetail(responseData.error)}`,
     );
 
   // Tawk normally wraps the session in `data`, but some edge responses use a
   // `session` envelope or return the session object directly.
-  const session = data?.data ?? data?.session ?? data;
+  const session =
+    responseData?.data ?? responseData?.session ?? responseData;
   // The first session is only used to reset any previous chat. Tawk may omit
   // `n` when the visitor has no active conversation yet.
   if (!session?.sk || !session?.vid) {
     const responseKeys =
-      data && typeof data === "object" ? Object.keys(data).join(",") : "none";
+      responseData && typeof responseData === "object"
+        ? Object.keys(responseData).join(",")
+        : "none";
     const sessionKeys =
       session && typeof session === "object"
         ? Object.keys(session).join(",")
         : "none";
     throw new Error(
-      `[${TAG}] Tawk session was not created (response: ${responseKeys}; session: ${sessionKeys}).`,
+      `[${TAG}] Tawk session was not created (HTTP ${response?.status ?? "unknown"}; content-type: ${response?.contentType ?? "unknown"}; response: ${responseKeys}; session: ${sessionKeys}).`,
     );
   }
   return { ...session, jar };
