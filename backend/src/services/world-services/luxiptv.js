@@ -175,10 +175,9 @@ async function startSession() {
       // Without a stored UUID, Tawk uses uik to issue a new visitor identity.
       // A new key prevents the session from inheriting an older transcript.
       uik: createVisitorKey(),
-      // Tawk's current widget client sends vss even when no server is pinned.
-      vss: "",
       consent: false,
       wss: "min",
+      uv: 3,
     },
     {
       referer: PAGE_URL,
