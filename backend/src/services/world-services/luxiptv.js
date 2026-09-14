@@ -19,12 +19,12 @@ const MESSAGE_URL = "https://va.tawk.to/v1/message/visitor";
 const TAG = "Lux IPTV";
 const TRIAL_HOURS = 24;
 const IDEMPOTENCY_ALPHABET =
-  "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-";
+  "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
 
 function createVisitorKey() {
   const bytes = randomBytes(21);
   return [...bytes]
-    .map((byte) => IDEMPOTENCY_ALPHABET[byte % IDEMPOTENCY_ALPHABET.length])
+    .map((_, index) => IDEMPOTENCY_ALPHABET[bytes[index] & 63])
     .join("");
 }
 
@@ -172,6 +172,8 @@ async function startSession() {
       platform: "desktop",
       tzo: new Date().getTimezoneOffset(),
       url: PAGE_URL,
+      referrer: "",
+      vss: "",
       // Without a stored UUID, Tawk uses uik to issue a new visitor identity.
       // A new key prevents the session from inheriting an older transcript.
       uik: createVisitorKey(),
