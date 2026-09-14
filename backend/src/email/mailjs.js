@@ -13,17 +13,28 @@ import { makeGetReader, createProviderMethods } from "./base.js";
 
 const BASE_URL = "https://mail.tm";
 const TAG = "Mailjs";
+const MAX_ACCOUNT_ATTEMPTS = 3;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 // Unwrap a Mailjs result and surface API failures consistently.
 const unwrap = (response, operation) => {
-  if (!response?.status)
+  if (!response?.status) {
+    const body = response?.data;
+    const detail =
+      response?.message ??
+      (body && typeof body === "object"
+        ? (body["hydra:description"] ?? body.detail ?? body.message)
+        : null);
+    const status = response?.statusCode ? ` (HTTP ${response.statusCode})` : "";
     throw new Error(
-      `[${TAG}] ${operation} failed: ${response?.message ?? "Unknown error"}`,
+      `[${TAG}] ${operation} failed${status}: ${detail ?? "Unknown error"}`,
     );
+  }
   return response.data ?? {};
 };
+
+const wait = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
 
 const toText = (value) =>
   Array.isArray(value)
@@ -95,18 +106,37 @@ export default {
 
   async createEmail(store) {
     logger.info(`[${TAG}] Creating a temporary Mail.tm account...`);
-    const mailjs = new Mailjs();
-    const account = unwrap(
-      await mailjs.createOneAccount(),
-      "Creating temporary account",
-    );
+    let lastError;
 
-    if (!account.username)
-      throw new Error(`[${TAG}] Account response did not include an address.`);
+    for (let attempt = 1; attempt <= MAX_ACCOUNT_ATTEMPTS; attempt += 1) {
+      const mailjs = new Mailjs({ rateLimitRetries: 5 });
+      try {
+        // UUIDs avoid collisions when several serverless instances create
+        // accounts at the same time.
+        const account = unwrap(
+          await mailjs.createOneAccount(true),
+          "Creating temporary account",
+        );
 
-    store._mailjsClient = mailjs;
-    logger.info(`[${TAG}] Email ready: ${account.username}`);
-    return account.username;
+        if (!account.username)
+          throw new Error(
+            `[${TAG}] Account response did not include an address.`,
+          );
+
+        store._mailjsClient = mailjs;
+        logger.info(`[${TAG}] Email ready: ${account.username}`);
+        return account.username;
+      } catch (error) {
+        lastError = error;
+        if (attempt === MAX_ACCOUNT_ATTEMPTS) break;
+        logger.warn(
+          `[${TAG}] Account attempt ${attempt}/${MAX_ACCOUNT_ATTEMPTS} failed; retrying...`,
+        );
+        await wait(attempt * 1000);
+      }
+    }
+
+    throw lastError;
   },
 
   ...createProviderMethods(TAG, getReader, { pollDelay: 1000, readDelay: 300 }),
