@@ -5,10 +5,10 @@
  * with Tawk, submits the pre-chat email, and the Lux support bot sends the
  * trial credentials by email.
  */
-import { randomBytes } from "node:crypto";
-import WebSocket from "ws";
-import { createJar, cookieStr, jsonPost } from "../../http/cookieClient.js";
 import { buildResult } from "../../parsing/generators.js";
+import { createJar, cookieStr, jsonPost } from "../../http/cookieClient.js";
+import WebSocket from "ws";
+import { randomBytes } from "node:crypto";
 
 const PROPERTY_ID = "64ac15e694cf5d49dc62ab13";
 const WIDGET_ID = "1h503b42e";
@@ -20,11 +20,6 @@ const TAG = "Lux IPTV";
 const TRIAL_HOURS = 24;
 const IDEMPOTENCY_ALPHABET =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-";
-const SOCKET_OPTIONS = {
-  Origin: new URL(PAGE_URL).origin,
-  Referer: PAGE_URL,
-  "User-Agent": "Mozilla/5.0",
-};
 
 function createVisitorKey() {
   const bytes = randomBytes(21);
@@ -43,20 +38,31 @@ function errorDetail(error) {
   return String(error ?? "unknown error");
 }
 
-function sendSocketFrame(session, frame, label) {
-  const url = `wss://${session.vss}/s/?k=${session.sk}&cver=4&pop=false&asver=0&tkn=${encodeURIComponent(session.tkn)}&transport=websocket`;
+function socketService(session, service, route, payload) {
   return new Promise((resolve, reject) => {
-    const socket = new WebSocket(url, {
-      headers: { ...SOCKET_OPTIONS, Cookie: cookieStr(session.jar) },
-    });
+    const socket = new WebSocket(
+      `wss://${session.vss}/s/?k=${session.sk}&cver=4&pop=false&asver=0&tkn=${encodeURIComponent(session.tkn)}&transport=websocket`,
+      {
+        headers: {
+          Origin: new URL(PAGE_URL).origin,
+          Referer: PAGE_URL,
+          "User-Agent": "Mozilla/5.0",
+          Cookie: cookieStr(session.jar),
+        },
+      },
+    );
     const timeout = setTimeout(() => {
       socket.close();
-      reject(new Error(`[${TAG}] ${label} timed out.`));
+      reject(new Error(`[${TAG}] Tawk socket request timed out.`));
     }, 30_000);
 
     socket.on("error", (error) => {
       clearTimeout(timeout);
-      reject(new Error(`[${TAG}] ${label} failed: ${errorDetail(error)}`));
+      reject(
+        new Error(
+          `[${TAG}] Tawk socket connection failed: ${errorDetail(error)}`,
+        ),
+      );
     });
     socket.on("message", (data) => {
       const text = data.toString();
@@ -70,35 +76,89 @@ function sendSocketFrame(session, frame, label) {
       if (frame.c !== "__callback__") return;
       clearTimeout(timeout);
       socket.close();
-      if (frame.p?.[0])
-        return reject(
-          new Error(`[${TAG}] ${label} rejected: ${errorDetail(frame.p[0])}`),
+      if (frame.p?.[0]) {
+        reject(
+          new Error(
+            `[${TAG}] Tawk ${route} rejected: ${errorDetail(frame.p[0])}`,
+          ),
         );
+        return;
+      }
       const result = frame.p?.[1];
       if (result?.ok === false)
-        return reject(
-          new Error(`[${TAG}] ${label} rejected: ${errorDetail(result.error)}`),
+        reject(
+          new Error(
+            `[${TAG}] Tawk ${route} rejected: ${errorDetail(result.error)}`,
+          ),
         );
-      resolve(result);
+      else resolve(result);
     });
-    socket.on("open", () => socket.send(`4${JSON.stringify(frame)}`));
+    socket.on("open", () => {
+      socket.send(
+        `4${JSON.stringify({
+          c: "service",
+          cb: 1,
+          p: [service, route, payload],
+        })}`,
+      );
+    });
   });
 }
 
-function socketService(session, service, route, payload) {
-  return sendSocketFrame(
-    session,
-    { c: "service", cb: 1, p: [service, route, payload] },
-    `Tawk ${route}`,
-  );
-}
-
 function endChat(session) {
-  return sendSocketFrame(
-    session,
-    { c: "endChat", cb: 1, p: [] },
-    "Tawk end-chat",
-  );
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(
+      `wss://${session.vss}/s/?k=${session.sk}&cver=4&pop=false&asver=0&tkn=${encodeURIComponent(session.tkn)}&transport=websocket`,
+      {
+        headers: {
+          Origin: new URL(PAGE_URL).origin,
+          Referer: PAGE_URL,
+          "User-Agent": "Mozilla/5.0",
+          Cookie: cookieStr(session.jar),
+        },
+      },
+    );
+    const timeout = setTimeout(() => {
+      socket.close();
+      reject(new Error(`[${TAG}] Tawk end-chat request timed out.`));
+    }, 30_000);
+
+    socket.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(
+        new Error(`[${TAG}] Tawk end-chat failed: ${errorDetail(error)}`),
+      );
+    });
+    socket.once("open", () => {
+      socket.send(
+        `4${JSON.stringify({
+          c: "endChat",
+          cb: 1,
+          p: [],
+        })}`,
+      );
+    });
+    socket.on("message", (data) => {
+      const text = data.toString();
+      if (!text.startsWith("4")) return;
+      let frame;
+      try {
+        frame = JSON.parse(text.slice(1));
+      } catch {
+        return;
+      }
+      if (frame.c !== "__callback__" || frame.cb !== 1) return;
+      clearTimeout(timeout);
+      socket.close();
+      if (frame.p?.[0])
+        reject(
+          new Error(
+            `[${TAG}] Tawk end-chat rejected: ${errorDetail(frame.p[0])}`,
+          ),
+        );
+      else resolve(frame.p?.[1] ?? null);
+    });
+  });
 }
 
 async function startSession() {
@@ -115,9 +175,10 @@ async function startSession() {
       // Without a stored UUID, Tawk uses uik to issue a new visitor identity.
       // A new key prevents the session from inheriting an older transcript.
       uik: createVisitorKey(),
+      // Tawk's current widget client sends vss even when no server is pinned.
+      vss: "",
       consent: false,
       wss: "min",
-      uv: 3,
     },
     {
       referer: PAGE_URL,
@@ -139,16 +200,24 @@ async function startSession() {
 }
 
 async function startFreshSession() {
-  const oldSession = await startSession();
-  await endChat(oldSession);
-  return startSession();
+  const previousSession = await startSession();
+  await endChat(previousSession);
+  const session = await startSession();
+
+  if (!session.n)
+    throw new Error(
+      `[${TAG}] Tawk did not return a conversation for the new visitor.`,
+    );
+
+  return session;
 }
 
 async function submitChat(session, email) {
-  const address = email.trim();
-  await socketService(session, "visitor-chat", PRECHAT_URL, { email: address });
+  await socketService(session, "visitor-chat", PRECHAT_URL, {
+    email: email.trim(),
+  });
   await socketService(session, "visitor-chat", MESSAGE_URL, {
-    message: address,
+    message: email.trim(),
   });
 }
 
