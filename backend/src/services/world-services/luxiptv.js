@@ -195,7 +195,9 @@ async function startSession() {
     );
 
   const session = data?.data;
-  if (!session?.sk || !session?.vid || !session?.n)
+  // The first session is only used to reset any previous chat. Tawk may omit
+  // `n` when the visitor has no active conversation yet.
+  if (!session?.sk || !session?.vid)
     throw new Error(`[${TAG}] Tawk session was not created.`);
   return { ...session, jar };
 }
