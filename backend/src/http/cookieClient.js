@@ -131,7 +131,6 @@ export async function jsonPost(url, jar, body, opts = {}) {
     timeout = DEFAULT_TIMEOUT,
     extraHeaders = {},
     throwOnError = true,
-    includeResponse = false,
   } = opts;
 
   const resolvedJar = jar ?? {};
@@ -164,9 +163,7 @@ export async function jsonPost(url, jar, body, opts = {}) {
   if (throwOnError && !res.ok)
     throw new Error(data?.error ?? data?.message ?? `HTTP ${res.status}`);
 
-  return includeResponse
-    ? { data, status: res.status, contentType: res.headers.get("content-type") }
-    : data;
+  return data;
 }
 
 // ── HTML helpers ─────────────────────────────────────────────────────────────
