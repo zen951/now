@@ -1,23 +1,70 @@
 /**
- * GreatestIPTV — free 36-hour trial (voco-fos-layer-iptvs platform).
+ * GreatestIPTV — free trial claim via direct API.
  *
- * Submits a JSON order to the /api/orders endpoint, then polls the inbox
- * for the confirmation email containing M3U playlist links.
+ * 1. POST the trial registration payload to the orders API.
+ * 2. Poll the inbox for the confirmation email containing M3U playlist links.
+ * Trial duration: 36 hours.
  */
-import { createSubmitTrialService } from "../rest-submit-trial-handler.js";
+import { buildResult } from "../../parsing/generators.js";
+import { jsonPost } from "../../http/cookieClient.js";
 
-export default createSubmitTrialService({
-  id: "greatestiptv",
-  name: "GreatestIPTV",
-  trialHours: 36,
-  filterText: "greatest",
-  timeout: 120_000,
-  apiUrl: "https://www.greatestiptv.com/api/orders",
-  referer: "https://www.greatestiptv.com/free-trial/?trial=true",
-  buildPayload: (email) => ({
-    planId: "trial",
-    email: email.trim(),
-    planType: "standard",
-    hasAdultContent: false,
-  }),
-});
+// ── Config ────────────────────────────────────────────────────────────────────
+const TRIAL_URL = "https://www.greatestiptv.com/free-trial/?trial=true"; // "https://www.strimoiptv.com/"
+const API_URL = "https://www.greatestiptv.com/api/orders"; // "https://www.strimoiptv.com"
+const TAG = "GreatestIPTV"; // "StrimoIPTV"
+const TRIAL_HOURS = 36;
+
+// ── Service ───────────────────────────────────────────────────────────────────
+
+export default {
+  meta: {
+    id: "greatestiptv", // "strimoiptv"
+    name: "GreatestIPTV", // "StrimoIPTV"
+    description: "36 Hours",
+  },
+
+  async execute({
+    provider,
+    credentialStore,
+    email,
+    inboxSeenIds = new Set(),
+    log = () => {},
+  }) {
+    // Step 1: Submit the trial request to the API.
+    await jsonPost(
+      API_URL,
+      null,
+      {
+        planId: "trial",
+        email: email.trim(),
+        planType: "standard",
+        hasAdultContent: false,
+      },
+      { referer: TRIAL_URL },
+    );
+    log(`[${TAG}] Trial request submitted via API.`);
+
+    // Step 2: Poll inbox for confirmation email with M3U links.
+    const playlists = await provider.waitForEmailAndExtractPlaylists(
+      credentialStore,
+      {
+        filterText: TAG,
+        seenIds: new Set(inboxSeenIds),
+        timeout: 120_000,
+      },
+    );
+
+    if (!playlists.allM3uLinks.length)
+      log(`[${TAG}] No M3U links found in confirmation email.`, "warn");
+    else
+      log(
+        `[${TAG}] ✅ M3U extracted — TV: ${playlists.tvPlaylist ?? "none"}, total: ${playlists.allM3uLinks.length}`,
+      );
+
+    return buildResult({
+      playlists,
+      trialHours: TRIAL_HOURS,
+      serviceName: "GreatestIPTV",
+    });
+  },
+};

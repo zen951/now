@@ -9,35 +9,33 @@
 
 import EmailnatorProvider from "../email/emailnator.js";
 import DropMailProvider from "../email/dropmail.js";
-import BestMailProvider from "../email/bestTempMail.js";
 import DisposeLolProvider from "../email/disposelol.js";
-import HioMailProvider from "../email/hiomail.js";
-import TempMailLolProvider from "../email/tempmailLol.js";
-import NoopmailProvider from "../email/noopmail.js";
-import PokemailProvider from "../email/pokemail.js";
+import FiveMinMailProvider from "../email/fiveMinMail.js";
+import TempMailIngProvider from "../email/tempmailIng.js";
+import BestMailProvider from "../email/bestTempMail.js";
+import TempMailAppProvider from "../email/tempMailApp.js";
+import TempMailFishProvider from "../email/tempMailFish.js";
+import TmailPkProvider from "../email/tmailPk.js";
+import TempMailCProvider from "../email/tempMailC.js";
 
 import Y666Service from "../services/russian-services/y666.js";
 import OgoTvService from "../services/russian-services/ogotv.js";
 import VeleStoreService from "../services/russian-services/velestore.js";
 import TvBoomService from "../services/russian-services/tvboom.js";
 
-import LuxIptvService from "../services/world-services/luxiptv.js";
 import TvCornService from "../services/world-services/tvcorn.js";
 import OneIptv4kService from "../services/world-services/oneiptv4k.js";
 import KookaService from "../services/kooka-kiwi-platform/kooka.js";
 import MyKiwiTvService from "../services/kooka-kiwi-platform/mykiwitv.js";
 
-import VocoIptvService from "../services/world-services/line-trxdnscloud/vocoiptv.js";
-import FosTvService from "../services/world-services/line-trxdnscloud/fostv.js";
-import LayerSevenTvService from "../services/world-services/line-trxdnscloud/layerseventv.js";
-import LayerSevenStvService from "../services/world-services/line-trxdnscloud/layersevenstv.js";
-import RevoIptvService from "../services/world-services/line-trxdnscloud/revoiptv.js";
-import IPTVSubscribeService from "../services/world-services/line-trxdnscloud/iptvsubscribe.js";
-import EmeraldIptvService from "../services/world-services/line-trxdnscloud/emeraldiptv.js";
+import RevoIptvService from "../services/world-services/revoiptv.js";
+import EmeraldIptvService from "../services/world-services/emeraldiptv.js";
 
 import IptvSkyService from "../services/world-services/iptvsky.js";
 import GreatestIptvService from "../services/world-services/greatestiptv.js";
+import BitTvService from "../services/world-services/bittv.js";
 
+import LuxIptvService from "../services/local-services/luxiptv.js";
 import LibertyTvService from "../services/local-services/libertytv.js";
 import LayerSevenService from "../services/local-services/layerseven.js";
 
@@ -47,12 +45,14 @@ import RuTvService from "../services/russian-services/rutv.js";
 export const emailProviders = [
   EmailnatorProvider,
   DropMailProvider,
-  BestMailProvider,
   DisposeLolProvider,
-  HioMailProvider,
-  TempMailLolProvider,
-  NoopmailProvider,
-  PokemailProvider,
+  FiveMinMailProvider,
+  TempMailIngProvider,
+  BestMailProvider,
+  TempMailAppProvider,
+  TempMailFishProvider,
+  TmailPkProvider,
+  TempMailCProvider,
 ];
 
 export const registrationServices = [
@@ -61,24 +61,20 @@ export const registrationServices = [
   VeleStoreService,
   TvBoomService,
 
-  LuxIptvService,
   TvCornService,
   OneIptv4kService,
   KookaService,
   MyKiwiTvService,
 
   // http://line.trxdnscloud.ru
-  VocoIptvService,
-  FosTvService,
-  LayerSevenTvService,
-  LayerSevenStvService,
   RevoIptvService,
-  IPTVSubscribeService,
   EmeraldIptvService,
 
   IptvSkyService,
   GreatestIptvService,
+  BitTvService,
 
+  LuxIptvService,
   LibertyTvService,
   LayerSevenService,
 
