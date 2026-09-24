@@ -28,7 +28,14 @@ const TRIAL_HOURS = 24;
 const DEFAULT_NAME = "John Doe";
 
 function generateVisitorId(ua = DEFAULT_UA) {
-  const scrList = ["1920x1080x24", "1366x768x24", "1536x864x24", "1440x900x24", "2560x1440x24", "1680x1050x24"];
+  const scrList = [
+    "1920x1080x24",
+    "1366x768x24",
+    "1536x864x24",
+    "1440x900x24",
+    "2560x1440x24",
+    "1680x1050x24",
+  ];
   const scr = scrList[Math.floor(Math.random() * scrList.length)];
   const cores = [4, 8, 12, 16][Math.floor(Math.random() * 4)];
   const raw = `${ua}|${scr}|en-IE|${cores}|Europe/Dublin|canvas_blocked`;
@@ -37,7 +44,10 @@ function generateVisitorId(ua = DEFAULT_UA) {
     a = Math.imul(a ^ raw.charCodeAt(i), 0x1000193);
   }
   const hash = (a >>> 0).toString(16).padStart(8, "0");
-  const b64 = Buffer.from(scr).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+  const b64 = Buffer.from(scr)
+    .toString("base64")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 8);
   return `fp_${hash}_${b64}`;
 }
 
