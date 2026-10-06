@@ -4,10 +4,18 @@
  * The public site does not expose a trial form. Its widget registers a visitor
  * with Tawk, submits the pre-chat email, and the Lux support bot sends the
  * trial credentials by email.
+ *
+ * Proxy support:
+ *   Set TAWK_PROXY_URL in the environment to route all Tawk traffic through
+ *   an HTTP/HTTPS proxy (e.g. "http://user:pass@host:port").
+ *   Required on Vercel and other cloud/datacenter deployments where Tawk's
+ *   WAF blocks the request and returns an empty body.
  */
 import { buildResult, computeExpiresAt } from "../../parsing/generators.js";
-import { createJar, cookieStr, jsonPost } from "../../http/cookieClient.js";
+import { createJar, cookieStr } from "../../http/cookieClient.js";
+import { ProxyAgent, fetch as undiciFetch } from "undici";
 import WebSocket from "ws";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import { randomBytes } from "node:crypto";
 
 const PROPERTY_ID = "64ac15e694cf5d49dc62ab13";
@@ -20,6 +28,18 @@ const TAG = "Lux IPTV";
 const TRIAL_HOURS = 24;
 const IDEMPOTENCY_ALPHABET =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-";
+
+// ── Proxy helpers ─────────────────────────────────────────────────────────────
+
+const PROXY_URL = process.env.TAWK_PROXY_URL ?? null;
+
+/** undici ProxyAgent for HTTP fetch calls (created once, reused). */
+const httpDispatcher = PROXY_URL ? new ProxyAgent(PROXY_URL) : undefined;
+
+/** https-proxy-agent for WebSocket connections. */
+const wsProxyAgent = PROXY_URL ? new HttpsProxyAgent(PROXY_URL) : undefined;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function createVisitorKey() {
   const bytes = randomBytes(21);
@@ -38,18 +58,69 @@ function errorDetail(error) {
   return String(error ?? "unknown error");
 }
 
+/**
+ * JSON POST that routes through the proxy when TAWK_PROXY_URL is set.
+ * Uses undici directly so we can pass a ProxyAgent dispatcher.
+ */
+async function tawkPost(url, jar, body) {
+  const res = await undiciFetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, */*;q=0.8",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      Cookie: cookieStr(jar),
+      Origin: new URL(PAGE_URL).origin,
+      Referer: PAGE_URL,
+      "Accept-Language": "en-US,en;q=0.9",
+      "Sec-Fetch-Site": "cross-site",
+      "Sec-Fetch-Mode": "cors",
+      "Sec-Fetch-Dest": "empty",
+      "sec-ch-ua":
+        '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+      "sec-ch-ua-mobile": "?0",
+      "sec-ch-ua-platform": '"Windows"',
+    },
+    body: JSON.stringify(body),
+    ...(httpDispatcher ? { dispatcher: httpDispatcher } : {}),
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  // Harvest cookies from response
+  for (const raw of res.headers.getSetCookie?.() ?? []) {
+    const [pair] = raw.split(";");
+    const eq = pair.indexOf("=");
+    if (eq > 0) jar[pair.slice(0, eq).trim()] = pair.slice(eq + 1).trim();
+  }
+
+  const text = await res.text();
+  try {
+    return { data: JSON.parse(text), status: res.status };
+  } catch {
+    return { data: {}, status: res.status };
+  }
+}
+
+// ── WebSocket helpers ─────────────────────────────────────────────────────────
+
+function makeWsOptions(session) {
+  return {
+    headers: {
+      Origin: new URL(PAGE_URL).origin,
+      Referer: PAGE_URL,
+      "User-Agent": "Mozilla/5.0",
+      Cookie: cookieStr(session.jar),
+    },
+    ...(wsProxyAgent ? { agent: wsProxyAgent } : {}),
+  };
+}
+
 function socketService(session, service, route, payload) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(
       `wss://${session.vss}/s/?k=${session.sk}&cver=4&pop=false&asver=0&tkn=${encodeURIComponent(session.tkn)}&transport=websocket`,
-      {
-        headers: {
-          Origin: new URL(PAGE_URL).origin,
-          Referer: PAGE_URL,
-          "User-Agent": "Mozilla/5.0",
-          Cookie: cookieStr(session.jar),
-        },
-      },
+      makeWsOptions(session),
     );
     const timeout = setTimeout(() => {
       socket.close();
@@ -109,14 +180,7 @@ function endChat(session) {
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(
       `wss://${session.vss}/s/?k=${session.sk}&cver=4&pop=false&asver=0&tkn=${encodeURIComponent(session.tkn)}&transport=websocket`,
-      {
-        headers: {
-          Origin: new URL(PAGE_URL).origin,
-          Referer: PAGE_URL,
-          "User-Agent": "Mozilla/5.0",
-          Cookie: cookieStr(session.jar),
-        },
-      },
+      makeWsOptions(session),
     );
     const timeout = setTimeout(() => {
       socket.close();
@@ -159,53 +223,36 @@ function endChat(session) {
   });
 }
 
+// ── Session management ────────────────────────────────────────────────────────
+
 async function startSession() {
   const jar = createJar();
-  const data = await jsonPost(
-    SESSION_URL,
-    jar,
-    {
-      p: PROPERTY_ID,
-      w: WIDGET_ID,
-      platform: "desktop",
-      tzo: new Date().getTimezoneOffset(),
-      url: PAGE_URL,
-      // Without a stored UUID, Tawk uses uik to issue a new visitor identity.
-      // A new key prevents the session from inheriting an older transcript.
-      uik: createVisitorKey(),
-      consent: false,
-      wss: "min",
-      uv: 3,
-    },
-    {
-      referer: PAGE_URL,
-      origin: "https://lux-iptv.tv",
-      throwOnError: false,
-      timeout: 30_000,
-      extraHeaders: {
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Sec-Fetch-Site": "cross-site",
-        "Sec-Fetch-Mode": "cors",
-        "Sec-Fetch-Dest": "empty",
-        "sec-ch-ua":
-          '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-        "sec-ch-ua-mobile": "?0",
-        "sec-ch-ua-platform": '"Windows"',
-      },
-    },
-  );
+  const { data, status } = await tawkPost(SESSION_URL, jar, {
+    p: PROPERTY_ID,
+    w: WIDGET_ID,
+    platform: "desktop",
+    tzo: new Date().getTimezoneOffset(),
+    url: PAGE_URL,
+    // A fresh visitor key prevents the session from inheriting an older transcript.
+    uik: createVisitorKey(),
+    consent: false,
+    wss: "min",
+    uv: 3,
+  });
 
   if (data?.ok === false)
     throw new Error(
-      `[${TAG}] Tawk session rejected: ${errorDetail(data.error)}`,
+      `[${TAG}] Tawk session rejected (HTTP ${status}): ${errorDetail(data.error)}`,
     );
 
   const session = data?.data;
   if (!session?.sk || !session?.vid || !session?.n)
     throw new Error(
-      `[${TAG}] Tawk session was not created. Response: ${JSON.stringify(data).slice(0, 300)}`,
+      `[${TAG}] Tawk session was not created (HTTP ${status}). ` +
+        (PROXY_URL ? "" : "Consider setting TAWK_PROXY_URL — ") +
+        `Response: ${JSON.stringify(data).slice(0, 300)}`,
     );
+
   return { ...session, jar };
 }
 
@@ -230,6 +277,8 @@ async function submitChat(session, email) {
     message: email.trim(),
   });
 }
+
+// ── Service export ────────────────────────────────────────────────────────────
 
 export default {
   meta: {
