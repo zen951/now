@@ -5,7 +5,7 @@
  * with Tawk, submits the pre-chat email, and the Lux support bot sends the
  * trial credentials by email.
  */
-import { buildResult } from "../../parsing/generators.js";
+import { buildResult, computeExpiresAt } from "../../parsing/generators.js";
 import { createJar, cookieStr, jsonPost } from "../../http/cookieClient.js";
 import WebSocket from "ws";
 import { randomBytes } from "node:crypto";
@@ -182,6 +182,17 @@ async function startSession() {
       origin: "https://lux-iptv.tv",
       throwOnError: false,
       timeout: 30_000,
+      extraHeaders: {
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "sec-ch-ua":
+          '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+      },
     },
   );
 
@@ -192,7 +203,9 @@ async function startSession() {
 
   const session = data?.data;
   if (!session?.sk || !session?.vid || !session?.n)
-    throw new Error(`[${TAG}] Tawk session was not created.`);
+    throw new Error(
+      `[${TAG}] Tawk session was not created. Response: ${JSON.stringify(data).slice(0, 300)}`,
+    );
   return { ...session, jar };
 }
 
@@ -259,6 +272,10 @@ export default {
     return buildResult({
       playlists,
       trialHours: TRIAL_HOURS,
+      duration: `${TRIAL_HOURS} Hours`,
+      expiresAt: computeExpiresAt(TRIAL_HOURS * 3_600_000, {
+        timeZone: "Asia/Jerusalem",
+      }),
       serviceName: TAG,
     });
   },
